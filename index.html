@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Mijn Kanban Todo Lijst</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+    h1 { text-align: center; }
+    .board { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; }
+    .column {
+      background: #e2e4e6; border-radius: 8px; padding: 10px; width: 300px; min-height: 500px;
+    }
+    .column h2 { text-align: center; margin: 0 0 10px 0; }
+    .add-card { margin-bottom: 10px; }
+    .add-card input { width: 100%; padding: 8px; box-sizing: border-box; }
+    .add-card button { width: 100%; padding: 8px; margin-top: 5px; background: #5aac44; color: white; border: none; cursor: pointer; }
+    .card {
+      background: white; padding: 12px; margin-bottom: 8px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+      cursor: grab;
+      position: relative;
+    }
+    .card:hover { box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+    .card.dragging { opacity: 0.5; }
+    .delete-btn {
+      position: absolute; top: 4px; right: 4px; background: #c33; color: white;
+      border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; cursor: pointer;
+    }
+    .edit-btn {
+      position: absolute; top: 4px; right: 28px; background: #666; color: white;
+      border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Mijn Kanban Todo Lijst</h1>
+  <div class="board">
+    <div class="column" id="todo">
+      <h2>To Do</h2>
+      <div class="add-card">
+        <input type="text" placeholder="Nieuwe taak..." id="input-todo" />
+        <button onclick="addCard('todo')">Toevoegen</button>
+      </div>
+      <div class="cards" ondrop="drop(event)" ondragover="allowDrop(event)"></div>
+    </div>
+
+    <div class="column" id="doing">
+      <h2>Doing</h2>
+      <div class="add-card">
+        <input type="text" placeholder="Nieuwe taak..." id="input-doing" />
+        <button onclick="addCard('doing')">Toevoegen</button>
+      </div>
+      <div class="cards" ondrop="drop(event)" ondragover="allowDrop(event)"></div>
+    </div>
+
+    <div class="column" id="done">
+      <h2>Done</h2>
+      <div class="add-card">
+        <input type="text" placeholder="Nieuwe taak..." id="input-done" />
+        <button onclick="addCard('done')">Toevoegen</button>
+      </div>
+      <div class="cards" ondrop="drop(event)" ondragover="allowDrop(event)"></div>
+    </div>
+  </div>
+
+  <!-- VERVANG DEZE URL DOOR JOUW EIGEN WEB APP URL -->
+  <script>
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxhnJFnwEx239H4FCkq6CXqV1jaL_8lv3wAqiMjTp6VQWw5-ycRyZplswoLmn_DQ7D4XQ/exec"; // <-- ZET HIER JE EIGEN URL
+
+    async function loadTasks() {
+      const res = await fetch(SCRIPT_URL + "?action=getAll");
+      const tasks = await res.json();
+
+      document.querySelectorAll(".cards").forEach(c => c.innerHTML = "");
+
+      tasks.forEach(task => {
+        createCardElement(task.id, task.title, task.status);
+      });
+    }
+
+    function createCardElement(id, title, status) {
+      const column = document.querySelector(`#${status} .cards`);
+      const div = document.createElement("div");
+      div.className = "card";
+      div.draggable = true;
+      div.dataset.id = id;
+      div.dataset.status = status;
+      div.ondragstart = drag;
+
+      div.innerHTML = `
+        <div>${title.replace(/\n/g, "<br>")}</div>
+        <button class="edit-btn" onclick="editCard(this, '${id}')">✎</button>
+        <button class="delete-btn" onclick="deleteCard('${id}', this)">×</button>
+      `;
+
+      column.appendChild(div);
+    }
+
+    async function addCard(columnId) {
+      const input = document.getElementById(`input-${columnId}`);
+      const title = input.value.trim();
+      if (!title) return;
+      input.value = "";
+
+      const res = await fetch(SCRIPT_URL + "?action=add&title=" + encodeURIComponent(title));
+      const task = await res.json();
+      createCardElement(task.id, title, columnId);
+    }
+
+    async function updateCard(id, newTitle, newStatus) {
+      const params = new URLSearchParams();
+      params.append("action", "update");
+      params.append("id", id);
+      if (newTitle !== undefined) params.append("title", newTitle);
+      if (newStatus !== undefined) params.append("status", newStatus);
+
+      await fetch(SCRIPT_URL + "?" + params, {method: "POST"});
+    }
+
+    async function deleteCard(id, btn) {
+      if (!confirm("Weet je zeker dat je deze taak wilt verwijderen?")) return;
+      await fetch(SCRIPT_URL + "?action=delete&id=" + id, {method: "POST"});
+      btn.parentElement.remove();
+    }
+
+    function editCard(btn, id) {
+      const card = btn.parentElement;
+      const currentText = card.firstChild.textContent;
+      const textarea = document.createElement("textarea");
+      textarea.value = currentText;
+      textarea.style.width = "100%";
+      card.firstChild.replaceWith(textarea);
+      textarea.focus();
+
+      const save = () => {
+        const newText = textarea.value.trim() || "Lege taak";
+        card.innerHTML = `<div>${newText.replace(/\n/g, "<br>")}</div>
+          <button class="edit-btn" onclick="editCard(this, '${id}')">✎</button>
+          <button class="delete-btn" onclick="deleteCard('${id}', this)">×</button>`;
+        updateCard(id, newText);
+      };
+
+      textarea.addEventListener("blur", save);
+      textarea.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); save(); } });
+    }
+
+    // Drag & Drop
+    function allowDrop(e) { e.preventDefault(); }
+    function drag(e) {
+      e.dataTransfer.setData("text", e.target.dataset.id);
+      e.target.classList.add("dragging");
+    }
+    function drop(e) {
+      e.preventDefault();
+      const id = e.dataTransfer.getData("text");
+      const card = document.querySelector(`[data-id="${id}"]`);
+      if (!card) return;
+      card.classList.remove("dragging");
+
+      const newColumn = e.target.closest(".column").id;
+      if (card.dataset.status === newColumn) {
+        e.target.closest(".cards").appendChild(card);
+      } else {
+        e.target.closest(".cards").appendChild(card);
+        card.dataset.status = newColumn;
+        updateCard(id, undefined, newColumn);
+      }
+    }
+
+    // Laad taken bij openen
+    loadTasks();
+    setInterval(loadTasks, 30000); // elke 30 sec refreshen (optioneel)
+  </script>
+</body>
+</html>
