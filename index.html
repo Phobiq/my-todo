@@ -5,6 +5,40 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Mijn Kanban Todo Lijst</title>
   <style>
+    /* Loading overlay */
+#loading {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+#loading.show {
+  opacity: 1;
+  pointer-events: all;
+}
+.spinner {
+  width: 60px;
+  height: 60px;
+  border: 6px solid #f3f3f3;
+  border-top: 6px solid #5aac44;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+#loading-text {
+  color: white;
+  margin-top: 20px;
+  font-size: 18px;
+}
     body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
     h1 { text-align: center; }
     .board { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; }
@@ -33,6 +67,12 @@
   </style>
 </head>
 <body>
+  <div id="loading">
+  <div>
+    <div class="spinner"></div>
+    <div id="loading-text">Taken laden…</div>
+  </div>
+</div>
   <h1>Mijn Kanban Todo Lijst</h1>
   <div class="board">
     <div class="column" id="todo">
@@ -93,13 +133,29 @@
     loadTasks();  // Refresh na delete
   };
 
-  function loadTasks() {
-    const script = document.createElement('script');
-    script.src = `${SCRIPT_URL}?action=getAll&callback=handleGetAll`;
-    document.head.appendChild(script);
-    // Verwijder na laden
-    script.onload = () => document.head.removeChild(script);
-  }
+function showLoading(text = "Taken laden…") {
+  document.getElementById("loading-text").textContent = text;
+  document.getElementById("loading").classList.add("show");
+}
+
+function hideLoading() {
+  document.getElementById("loading").classList.remove("show");
+}
+  
+function loadTasks() {
+  showLoading("Taken laden…");
+  const script = document.createElement('script');
+  script.src = `${SCRIPT_URL}?action=getAll&callback=handleGetAll`;
+  script.onerror = () => {
+    hideLoading();
+    alert("Kan geen verbinding maken met Google Sheets");
+  };
+  document.head.appendChild(script);
+  script.onload = () => {
+    document.head.removeChild(script);
+    setTimeout(hideLoading, 300); // kleine fade-out
+  };
+}
 
   function createCardElement(id, title, status) {
     const column = document.querySelector(`#${status} .cards`);
@@ -119,42 +175,52 @@
     column.appendChild(div);
   }
 
-  function addCard(columnId) {
-    const input = document.getElementById(`input-${columnId}`);
-    const title = input.value.trim();
-    if (!title) return;
-    input.value = "";
+function addCard(columnId) {
+  const input = document.getElementById(`input-${columnId}`);
+  const title = input.value.trim();
+  if (!title) return;
+  input.value = "";
+  showLoading("Toevoegen…");
 
-    const script = document.createElement('script');
-    script.src = `${SCRIPT_URL}?action=add&title=${encodeURIComponent(title)}&callback=handleAdd`;
-    document.head.appendChild(script);
-    script.onload = () => document.head.removeChild(script);
-  }
+  const script = document.createElement('script');
+  script.src = `${SCRIPT_URL}?action=add&title=${encodeURIComponent(title)}&callback=handleAdd`;
+  document.head.appendChild(script);
+  script.onload = () => {
+    document.head.removeChild(script);
+    hideLoading();
+  };
+}
 
-  function updateCard(id, newTitle, newStatus) {
-    const params = new URLSearchParams();
-    params.append("action", "update");
-    params.append("id", id);
-    if (newTitle !== undefined) params.append("title", newTitle);
-    if (newStatus !== undefined) params.append("status", newStatus);
+function updateCard(id, newTitle, newStatus) {
+  showLoading("Opslaan…");
+  const params = new URLSearchParams();
+  params.append("action", "update");
+  params.append("id", id);
+  if (newTitle !== undefined) params.append("title", newTitle);
+  if (newStatus !== undefined) params.append("status", newStatus);
 
-    const script = document.createElement('script');
-    script.src = `${SCRIPT_URL}?${params}&callback=handleUpdate`;
-    document.head.appendChild(script);
-    script.onload = () => document.head.removeChild(script);
-  }
+  const script = document.createElement('script');
+  script.src = `${SCRIPT_URL}?${params}&callback=handleUpdate`;
+  document.head.appendChild(script);
+  script.onload = () => {
+    document.head.removeChild(script);
+    hideLoading();
+  };
+}
 
-  function deleteCard(id, btn) {
-    if (!confirm("Weet je zeker dat je deze taak wilt verwijderen?")) return;
+function deleteCard(id, btn) {
+  if (!confirm("Weet je zeker dat je deze taak wilt verwijderen?")) return;
+  showLoading("Verwijderen…");
 
-    const script = document.createElement('script');
-    script.src = `${SCRIPT_URL}?action=delete&id=${id}&callback=handleDelete`;
-    document.head.appendChild(script);
-    script.onload = () => {
-      document.head.removeChild(script);
-      btn.parentElement.remove();  // Verwijder lokaal meteen
-    };
-  }
+  const script = document.createElement('script');
+  script.src = `${SCRIPT_URL}?action=delete&id=${id}&callback=handleDelete`;
+  document.head.appendChild(script);
+  script.onload = () => {
+    document.head.removeChild(script);
+    hideLoading();
+    btn.parentElement.remove();
+  };
+}
 
   function editCard(btn, id) {
     const card = btn.parentElement;
