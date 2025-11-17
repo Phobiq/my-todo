@@ -122,16 +122,28 @@
     createCardElement(data.id, data.title, data.status);
   };
 
-  window.handleUpdate = function(data) {
-    if (!data.success) console.error("Update mislukt");
-    // Refresh de hele lijst na update (simpel)
-    loadTasks();
-  };
+window.handleUpdate = function(data) {
+  // Wordt nu alleen gebruikt bij titel bewerken
+  if (data && data.error) {
+    alert("Opslaan mislukt: " + data.error);
+  }
+  hideLoading();
+  // Geen loadTasks() meer → voorkomt flikkering
+};
 
   window.handleDelete = function(data) {
     if (!data.success) console.error("Delete mislukt");
     loadTasks();  // Refresh na delete
   };
+
+  window.handleStatusUpdate = function(data) {
+  // We doen hier niks met de response, want we hebben al optimistisch verplaatst
+  // Alleen foutafhandeling als je wil:
+  if (data && data.error) {
+    alert("Verplaatsen mislukt: " + data.error);
+    loadTasks(); // fallback: hele lijst opnieuw laden
+  }
+};
 
 function showLoading(text = "Taken laden…") {
   document.getElementById("loading-text").textContent = text;
@@ -249,27 +261,43 @@ function deleteCard(id, btn) {
   }
 
   // Drag & Drop (ongewijzigd)
-  function allowDrop(e) { e.preventDefault(); }
-  function drag(e) {
-    e.dataTransfer.setData("text", e.target.dataset.id);
-    e.target.classList.add("dragging");
-  }
-  function drop(e) {
-    e.preventDefault();
-    const id = e.dataTransfer.getData("text");
-    const card = document.querySelector(`[data-id="${id}"]`);
-    if (!card) return;
-    card.classList.remove("dragging");
+function drop(e) {
+  e.preventDefault();
+  const id = e.dataTransfer.getData("text");
+  const card = document.querySelector(`[data-id="${id}"]`);
+  if (!card) return;
+  card.classList.remove("dragging");
 
-    const newColumn = e.target.closest(".column").id;
-    if (card.dataset.status === newColumn) {
-      e.target.closest(".cards").appendChild(card);
-    } else {
-      e.target.closest(".cards").appendChild(card);
-      card.dataset.status = newColumn;
-      updateCard(id, undefined, newColumn);
-    }
+  const newColumn = e.target.closest(".column").id;
+
+  // Alleen updaten als de kolom echt veranderd is
+  if (card.dataset.status !== newColumn) {
+    // Eerst visueel verplaatsen
+    e.target.closest(".cards").appendChild(card);
+    card.dataset.status = newColumn;
+
+    // Optimistic update: meteen doorvoeren zonder te wachten op volledige refresh
+    showLoading("Verplaatsen…");
+
+    const params = new URLSearchParams();
+    params.append("action", "update");
+    params.append("id", id);
+    params.append("status", newColumn);
+
+    const script = document.createElement('script');
+    script.src = `${SCRIPT_URL}?${params}&callback=handleStatusUpdate`;
+    document.head.appendChild(script);
+    script.onload = () => {
+      document.head.removeChild(script);
+      hideLoading();
+      // Optioneel: alleen refreshen als je andere mensen tegelijk willen zien
+      // loadTasks();   ← uitzetten = sneller en geen flikkering!
+    };
+  } else {
+    // Gewoon binnen dezelfde kolom: toch netjes neerzetten
+    e.target.closest(".cards").appendChild(card);
   }
+}
 
   // Laad bij starten
   loadTasks();
