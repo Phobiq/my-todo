@@ -300,8 +300,18 @@ function drop(e) {
 }
 
   // Laad bij starten
+function allowDrop(e) {
+    e.preventDefault();
+  }
+
+  function drag(e) {
+    e.dataTransfer.setData("text", e.target.dataset.id);
+    e.target.classList.add("dragging");
+  }
+
+  // Laad bij starten
   loadTasks();
-  setInterval(loadTasks, 30000);  // Refresh elke 30 sec
+  setInterval(loadTasks, 30000); // Refresh elke 30 sec
 </script>
 </body>
 </html>
