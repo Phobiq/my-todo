@@ -64,6 +64,11 @@
       position: absolute; top: 4px; right: 28px; background: #666; color: white;
       border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; cursor: pointer;
     }
+    .card.selected {
+  outline: 4px solid #5aac44;
+  box-shadow: 0 0 12px rgba(90, 172, 68, 0.6);
+  z-index: 100;
+}
   </style>
 </head>
 <body>
@@ -310,8 +315,91 @@ function allowDrop(e) {
   }
 
   // Laad bij starten
+// ========= TOETSENBORD-NAVIGATIE =========
+let selectedCard = null;
+
+function selectCard(card) {
+  // Verwijder oude selectie
+  document.querySelectorAll(".card.selected").forEach(c => c.classList.remove("selected"));
+  // Nieuwe selectie
+  if (card) {
+    card.classList.add("selected");
+    selectedCard = card;
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
+  } else {
+    selectedCard = null;
+  }
+}
+
+// Klik op een kaartje = selecteren
+document.addEventListener("click", e => {
+  const card = e.target.closest(".card");
+  if (card) {
+    selectCard(card);
+  } else if (!e.target.closest(".column")) {
+    selectCard(null); // klik buiten = deselecteren
+  }
+});
+
+// Toetsenborduitleg
+document.addEventListener("keydown", e => {
+  if (!selectedCard) return;
+
+  const currentCol = selectedCard.dataset.status;
+  const cardId = selectedCard.dataset.id;
+  let newCol = currentCol;
+
+  if (e.key === "ArrowLeft") {
+    e.preventDefault();
+    if (currentCol === "doing") newCol = "todo";
+    else if (currentCol === "done") newCol = "doing";
+  }
+  else if (e.key === "ArrowRight") {
+    e.preventDefault();
+    if (currentCol === "todo") newCol = "doing";
+    else if (currentCol === "doing") newCol = "done";
+  }
+  else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+    e.preventDefault();
+    const cardsList = selectedCard.parentElement;
+    const cards = Array.from(cardsList.children);
+    const index = cards.indexOf(selectedCard);
+
+    if (e.key === "ArrowUp" && index > 0) {
+      cardsList.insertBefore(selectedCard, cards[index - 1]);
+    }
+    else if (e.key === "ArrowDown" && index < cards.length - 1) {
+      cardsList.insertBefore(selectedCard, cards[index + 1].nextSibling);
+    }
+    return; // geen backend-update nodig bij omhoog/omlaag binnen kolom
+  }
+  else {
+    return; // andere toets → niks doen
+  }
+
+  // Kolom is veranderd → verplaats + update backend
+  if (newCol !== currentCol) {
+    showLoading("Verplaatsen…");
+    selectedCard.dataset.status = newCol;
+    document.querySelector(`#${newCol} .cards`).appendChild(selectedCard);
+
+    const params = new URLSearchParams();
+    params.append("action", "update");
+    params.append("id", cardId);
+    params.append("status", newCol);
+
+    const script = document.createElement('script');
+    script.src = `${SCRIPT_URL}?${params}&callback=handleStatusUpdate`;
+    document.head.appendChild(script);
+    script.onload = () => {
+      document.head.removeChild(script);
+      hideLoading();
+    };
+  }
+});
+  
   loadTasks();
-  setInterval(loadTasks, 30000); // Refresh elke 30 sec
+//  setInterval(loadTasks, 30000); // Refresh elke 30 sec
 </script>
 </body>
 </html>
