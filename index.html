@@ -64,112 +64,150 @@
   </div>
 
   <!-- VERVANG DEZE URL DOOR JOUW EIGEN WEB APP URL -->
-  <script>
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzg8bYvvftzNeB9w2m3hhVIGvzU1-kGITQhbbf5S7ONWutcSYL7BdHzDX4G_SgH55eodA/exec"; // <-- ZET HIER JE EIGEN URL
+<!-- ... (je HTML blijft hetzelfde tot aan <script>) ... -->
 
-    async function loadTasks() {
-      const res = await fetch(SCRIPT_URL + "?action=getAll");
-      const tasks = await res.json();
+<script>
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzg8bYvvftzNeB9w2m3hhVIGvzU1-kGITQhbbf5S7ONWutcSYL7BdHzDX4G_SgH55eodA/exec";  // ← NIEUWE URL!
 
-      document.querySelectorAll(".cards").forEach(c => c.innerHTML = "");
+  // Globale callback-functies voor JSONP
+  window.handleGetAll = function(data) {
+    document.querySelectorAll(".cards").forEach(c => c.innerHTML = "");
+    data.forEach(task => {
+      createCardElement(task.id, task.title, task.status);
+    });
+  };
 
-      tasks.forEach(task => {
-        createCardElement(task.id, task.title, task.status);
-      });
-    }
+  window.handleAdd = function(data) {
+    if (data.error) return alert(data.error);
+    createCardElement(data.id, data.title, data.status);
+  };
 
-    function createCardElement(id, title, status) {
-      const column = document.querySelector(`#${status} .cards`);
-      const div = document.createElement("div");
-      div.className = "card";
-      div.draggable = true;
-      div.dataset.id = id;
-      div.dataset.status = status;
-      div.ondragstart = drag;
-
-      div.innerHTML = `
-        <div>${title.replace(/\n/g, "<br>")}</div>
-        <button class="edit-btn" onclick="editCard(this, '${id}')">✎</button>
-        <button class="delete-btn" onclick="deleteCard('${id}', this)">×</button>
-      `;
-
-      column.appendChild(div);
-    }
-
-    async function addCard(columnId) {
-      const input = document.getElementById(`input-${columnId}`);
-      const title = input.value.trim();
-      if (!title) return;
-      input.value = "";
-
-      const res = await fetch(SCRIPT_URL + "?action=add&title=" + encodeURIComponent(title));
-      const task = await res.json();
-      createCardElement(task.id, title, columnId);
-    }
-
-    async function updateCard(id, newTitle, newStatus) {
-      const params = new URLSearchParams();
-      params.append("action", "update");
-      params.append("id", id);
-      if (newTitle !== undefined) params.append("title", newTitle);
-      if (newStatus !== undefined) params.append("status", newStatus);
-
-      await fetch(SCRIPT_URL + "?" + params, {method: "POST"});
-    }
-
-    async function deleteCard(id, btn) {
-      if (!confirm("Weet je zeker dat je deze taak wilt verwijderen?")) return;
-      await fetch(SCRIPT_URL + "?action=delete&id=" + id, {method: "POST"});
-      btn.parentElement.remove();
-    }
-
-    function editCard(btn, id) {
-      const card = btn.parentElement;
-      const currentText = card.firstChild.textContent;
-      const textarea = document.createElement("textarea");
-      textarea.value = currentText;
-      textarea.style.width = "100%";
-      card.firstChild.replaceWith(textarea);
-      textarea.focus();
-
-      const save = () => {
-        const newText = textarea.value.trim() || "Lege taak";
-        card.innerHTML = `<div>${newText.replace(/\n/g, "<br>")}</div>
-          <button class="edit-btn" onclick="editCard(this, '${id}')">✎</button>
-          <button class="delete-btn" onclick="deleteCard('${id}', this)">×</button>`;
-        updateCard(id, newText);
-      };
-
-      textarea.addEventListener("blur", save);
-      textarea.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); save(); } });
-    }
-
-    // Drag & Drop
-    function allowDrop(e) { e.preventDefault(); }
-    function drag(e) {
-      e.dataTransfer.setData("text", e.target.dataset.id);
-      e.target.classList.add("dragging");
-    }
-    function drop(e) {
-      e.preventDefault();
-      const id = e.dataTransfer.getData("text");
-      const card = document.querySelector(`[data-id="${id}"]`);
-      if (!card) return;
-      card.classList.remove("dragging");
-
-      const newColumn = e.target.closest(".column").id;
-      if (card.dataset.status === newColumn) {
-        e.target.closest(".cards").appendChild(card);
-      } else {
-        e.target.closest(".cards").appendChild(card);
-        card.dataset.status = newColumn;
-        updateCard(id, undefined, newColumn);
-      }
-    }
-
-    // Laad taken bij openen
+  window.handleUpdate = function(data) {
+    if (!data.success) console.error("Update mislukt");
+    // Refresh de hele lijst na update (simpel)
     loadTasks();
-    setInterval(loadTasks, 30000); // elke 30 sec refreshen (optioneel)
-  </script>
+  };
+
+  window.handleDelete = function(data) {
+    if (!data.success) console.error("Delete mislukt");
+    loadTasks();  // Refresh na delete
+  };
+
+  function loadTasks() {
+    const script = document.createElement('script');
+    script.src = `${SCRIPT_URL}?action=getAll&callback=handleGetAll`;
+    document.head.appendChild(script);
+    // Verwijder na laden
+    script.onload = () => document.head.removeChild(script);
+  }
+
+  function createCardElement(id, title, status) {
+    const column = document.querySelector(`#${status} .cards`);
+    const div = document.createElement("div");
+    div.className = "card";
+    div.draggable = true;
+    div.dataset.id = id;
+    div.dataset.status = status;
+    div.ondragstart = drag;
+
+    div.innerHTML = `
+      <div>${title.replace(/\n/g, "<br>")}</div>
+      <button class="edit-btn" onclick="editCard(this, '${id}')">✎</button>
+      <button class="delete-btn" onclick="deleteCard('${id}', this)">×</button>
+    `;
+
+    column.appendChild(div);
+  }
+
+  function addCard(columnId) {
+    const input = document.getElementById(`input-${columnId}`);
+    const title = input.value.trim();
+    if (!title) return;
+    input.value = "";
+
+    const script = document.createElement('script');
+    script.src = `${SCRIPT_URL}?action=add&title=${encodeURIComponent(title)}&callback=handleAdd`;
+    document.head.appendChild(script);
+    script.onload = () => document.head.removeChild(script);
+  }
+
+  function updateCard(id, newTitle, newStatus) {
+    const params = new URLSearchParams();
+    params.append("action", "update");
+    params.append("id", id);
+    if (newTitle !== undefined) params.append("title", newTitle);
+    if (newStatus !== undefined) params.append("status", newStatus);
+
+    const script = document.createElement('script');
+    script.src = `${SCRIPT_URL}?${params}&callback=handleUpdate`;
+    document.head.appendChild(script);
+    script.onload = () => document.head.removeChild(script);
+  }
+
+  function deleteCard(id, btn) {
+    if (!confirm("Weet je zeker dat je deze taak wilt verwijderen?")) return;
+
+    const script = document.createElement('script');
+    script.src = `${SCRIPT_URL}?action=delete&id=${id}&callback=handleDelete`;
+    document.head.appendChild(script);
+    script.onload = () => {
+      document.head.removeChild(script);
+      btn.parentElement.remove();  // Verwijder lokaal meteen
+    };
+  }
+
+  function editCard(btn, id) {
+    const card = btn.parentElement;
+    const currentText = card.firstChild.textContent;
+    const textarea = document.createElement("textarea");
+    textarea.value = currentText;
+    textarea.style.width = "100%";
+    card.firstChild.replaceWith(textarea);
+    textarea.focus();
+
+    const save = () => {
+      const newText = textarea.value.trim() || "Lege taak";
+      card.innerHTML = `<div>${newText.replace(/\n/g, "<br>")}</div>
+        <button class="edit-btn" onclick="editCard(this, '${id}')">✎</button>
+        <button class="delete-btn" onclick="deleteCard('${id}', this)">×</button>`;
+      updateCard(id, newText);
+    };
+
+    textarea.addEventListener("blur", save);
+    textarea.addEventListener("keydown", e => { 
+      if (e.key === "Enter" && !e.shiftKey) { 
+        e.preventDefault(); 
+        save(); 
+      } 
+    });
+  }
+
+  // Drag & Drop (ongewijzigd)
+  function allowDrop(e) { e.preventDefault(); }
+  function drag(e) {
+    e.dataTransfer.setData("text", e.target.dataset.id);
+    e.target.classList.add("dragging");
+  }
+  function drop(e) {
+    e.preventDefault();
+    const id = e.dataTransfer.getData("text");
+    const card = document.querySelector(`[data-id="${id}"]`);
+    if (!card) return;
+    card.classList.remove("dragging");
+
+    const newColumn = e.target.closest(".column").id;
+    if (card.dataset.status === newColumn) {
+      e.target.closest(".cards").appendChild(card);
+    } else {
+      e.target.closest(".cards").appendChild(card);
+      card.dataset.status = newColumn;
+      updateCard(id, undefined, newColumn);
+    }
+  }
+
+  // Laad bij starten
+  loadTasks();
+  setInterval(loadTasks, 30000);  // Refresh elke 30 sec
+</script>
 </body>
 </html>
